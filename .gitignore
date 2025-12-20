@@ -1,0 +1,54 @@
+# Pastas grandes
+data/
+datasets/
+checkpoints/
+models/
+build/
+dist/
+
+# === Astronomia / Dados científicos ===
+*.fits
+*.fit
+*.fz
+
+# Catálogos e datasets
+Gaia*
+SDSS*
+lamost*
+
+# Espectros e dados brutos
+sdss_spectra/
+results_convolution/
+pipeline_output/
+pipeline_output/**
+convolucao_20251219_000348/
+convolucao_20251219_120500/
+
+# Outputs intermediários
+spectra/
+spectra/**
+quality_control/
+
+# Caches e temporários
+__pycache__/
+.cache/
+
+
+# Arquivos grandes comuns
+*.zip
+*.tar
+*.tar.gz
+*.7z
+*.iso
+*.bin
+*.ckpt
+*.pth
+*.h5
+*.onnx
+*.npz
+*.pdf
+
+
+# Logs e caches
+*.log
+.cache/

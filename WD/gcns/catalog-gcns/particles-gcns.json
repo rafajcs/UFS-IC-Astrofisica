@@ -1,0 +1,27 @@
+{ "objects" : [
+	{
+		"name" : "Gaia Catalog of Nearby Stars",
+		"position" : [0.0, 0.0, 0.0],
+		"color" : [1.0, 1.0, 1.0, 0.25],
+		"size" : 6.0,
+		"labelcolor" : [1.0, 1.0, 1.0, 1.0],
+		"labelposition" : [0.0, -7.0e7, -5e8],
+		"ct" : "Stars",
+		
+		"fadeout" : [21e2, .5e5],
+		
+		"profiledecay" : 1.0,
+	
+		"parent" : "Universe", 
+		"impl" : "gaia.cu9.ari.gaiaorbit.scenegraph.StarGroup",
+		
+		"cataloginfo" : {
+			"name" : "GCNS",
+			"description" : "Gaia Catalog of Nearby Stars (R.L. Smart et. al. 2020). 331078 stars.",
+			"type" : "INTERNAL"
+		},
+		
+		"provider" : "gaia.cu9.ari.gaiaorbit.data.group.STILDataProvider",
+		"datafile" : "$data/catalog-gcns/catalog/gcns/gcns.vot"
+	}
+]}

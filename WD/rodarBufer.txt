@@ -1,0 +1,20 @@
+# Carregar amostra
+df = load_photometry_catalog(catalog_path, max_rows=5000, chunk_size=1000)
+
+# Filtrar objetos com boa fotometria
+df_good = df[df['phot_g_mean_mag'].notna()].copy()
+
+# Plotar alguns SEDs (agora sem warnings!)
+import random
+random.seed(42)
+sample_indices = random.sample(range(len(df_good)), min(5, len(df_good)))
+
+for i, idx in enumerate(sample_indices):
+    sed = extract_sed(df_good, idx)
+    if len(sed['wavelengths']) >= 3:
+        plot_sed(sed, save_path=f"SED_WD_{i:03d}.pdf", 
+                show_info=True, df=df_good, index=idx)
+
+# Comparação múltipla
+plot_multiple_seds(df_good, indices=sample_indices, 
+                  save_path="SED_comparison.pdf")

@@ -1,0 +1,20 @@
+{
+  "key" : "catalog-gcns",
+  "name" : "Gaia Catalog of Nearby Stars",
+  "type" : "catalog-gaia",
+  "version" : 3,
+  "mingsversion": 30301,
+  "description" : "The Gaia Catalog of Nearby Stars (R.L. Smart et. al., 2020) is a clean and well-characterised catalogue of objects within 100 pc of the Sun from the Gaia Early Data Release 3. The catalogue is estimated to contain at least 92% of stars of stellar type M9 within 100 pc of the Sun.",
+  "link" : "https://arxiv.org/abs/2012.02061",
+  "size" : 616995788,
+  "releasenotes" : "- Update to new data format structure in Gaia Sky 3.3.1.",
+  "nobjects" : 331078,
+
+  "check": "$data/catalog-gcns/dataset.json",
+  "files" : [ "$data/catalog-gcns" ],
+  "data" : [
+    {
+      "loader": "gaia.cu9.ari.gaiaorbit.data.JsonLoader",
+      "files": [ "$data/catalog-gcns/particles-gcns.json" ]
+    }
+  ]}

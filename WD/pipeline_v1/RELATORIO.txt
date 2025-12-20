@@ -1,0 +1,31 @@
+
+PIPELINE DE UNIÃO DE CATÁLOGOS - RELATÓRIO FINAL
+=================================================
+Data: 2025-12-14 21:20:33
+
+ETAPAS EXECUTADAS:
+   1. União de catálogos
+   2. Filtro de objetos com espectros
+   3. Remoção de duplicatas (5 arcsec)
+   4. Exportação final
+
+RESULTADO FINAL:
+   Total: 18,553 anãs brancas únicas com espectros disponíveis
+
+ARQUIVOS GERADOS:
+   pipeline_20251214_211845/
+   ├── final_wd_catalog.csv          (catálogo final)
+   ├── final_wd_catalog.fits         (catálogo final)
+   ├── checkpoint_step1_union.csv
+   ├── checkpoint_step2_with_spectra.csv
+   ├── checkpoint_step3_unique.csv
+   ├── objects_without_spectra.csv
+   ├── duplicates_removed.csv
+   └── RELATORIO.txt
+
+PRÓXIMOS PASSOS:
+   1. Download de espectros faltantes
+   2. Convolução com filtros S-PLUS
+   3. Análise científica
+
+✅ PIPELINE CONCLUÍDO COM SUCESSO!
