@@ -42,7 +42,7 @@ import os
 
 # Procurar catálogos possíveis
 patterns = [
-    "pipeline_*/checkpoints/step1_union.csv",
+    "pipeline_*/final_wd_catalog.csv",
     "unified_catalog_*/SDSS_Gaia_unified_catalog.csv",
     "final_catalog_*/catalog_complete.csv",
     "*union*.csv",
@@ -83,23 +83,48 @@ df_catalog = pd.read_csv(catalog_path)
 print(f"✅ Catálogo unificado carregado: {len(df_catalog):,} objetos")
 print(f"   Colunas: {len(df_catalog.columns)}\n")
 
-# ==================== PASSO 3: FAZER MATCH ====================
+# ==================== PASSO 3: PREPARAR DATAFRAMES PARA MERGE ====================
 
-print("PASSO 3: Associando convolução com catálogo")
+print("PASSO 3: Preparando DataFrames para merge")
 print("-"*80)
 
-# Identificar colunas de match
-match_cols_conv = ['plate', 'mjd', 'fiberid']
-match_cols_cat = None
+# ============ 3.1: CRIAR IDENTIFICADOR ÚNICO DO ESPECTRO ============
 
-# Procurar colunas correspondentes no catálogo
+print("\n📌 Criando identificador espectral único...")
+
+# Para df_conv: garantir que temos plate, mjd, fiberid
+if 'plate' not in df_conv.columns or 'mjd' not in df_conv.columns:
+    print("❌ ERRO: convolution_results.csv deve ter colunas 'plate' e 'mjd'")
+    exit(1)
+
+# Identificar coluna de fiber no df_conv
+fiber_col_conv = None
+for col in ['fiberid', 'fiber', 'Fiber', 'FIBER']:
+    if col in df_conv.columns:
+        fiber_col_conv = col
+        break
+
+if not fiber_col_conv:
+    print("❌ ERRO: convolution_results.csv deve ter coluna de fiber")
+    exit(1)
+
+# Criar identificador único para convolução
+df_conv['spec_id'] = df_conv.apply(
+    lambda row: f"spec-{int(row['plate'])}-{int(row['mjd'])}-{int(row[fiber_col_conv])}", 
+    axis=1
+)
+
+print(f"   ✓ df_conv: spec_id criado usando [{fiber_col_conv}]")
+
+# Para df_catalog: identificar colunas de match
 possible_matches = {
     'plate': ['plate', 'Plate', 'PLATE'],
     'mjd': ['mjd', 'MJD'],
     'fiber': ['fiberid', 'fiber', 'Fiber', 'FIBER']
 }
 
-match_cols_cat = []
+#match_cols_cat = []
+match_cols = {}
 for key in ['plate', 'mjd', 'fiber']:
     found = None
     for candidate in possible_matches[key]:
@@ -107,57 +132,100 @@ for key in ['plate', 'mjd', 'fiber']:
             found = candidate
             break
     if found:
-        match_cols_cat.append(found)
-        print(f"   ✓ Match: {key:10s} → {found}")
+        match_cols[key] = found
+        print(f"   ✓ df_catalog: {key:10s} → {found}")
     else:
-        print(f"   ✗ Não encontrado: {key}")
+        print(f"   ✗ df_catalog: {key} não encontrado!")
 
-if len(match_cols_cat) != 3:
-    print("\n❌ ERRO: Colunas de match incompletas!")
-    print("   Necessário: plate, mjd, fiber/fiberid\n")
+if len(match_cols) != 3:
+    print("\n❌ ERRO: Catálogo deve ter colunas plate, mjd e fiber/fiberid")
     exit(1)
 
-# Renomear para padronizar
-rename_map = dict(zip(match_cols_cat, ['plate', 'mjd', 'fiber']))
-df_catalog_renamed = df_catalog.rename(columns=rename_map)
 
+# Criar identificador único para catálogo
+def make_spec_id(row):
+    try:
+        if pd.isna(row[match_cols['plate']]) or pd.isna(row[match_cols['mjd']]) or pd.isna(row[match_cols['fiber']]):
+            return np.nan
+        return f"spec-{int(row[match_cols['plate']])}-{int(row[match_cols['mjd']])}-{int(row[match_cols['fiber']])}"
+    except Exception:
+        return np.nan
 
+df_catalog['spec_id'] = df_catalog.apply(make_spec_id, axis=1)
 
-# Fazer merge
-print(f"\n🔗 Fazendo merge...")
+# remover linhas sem spec_id (não têm espectro SDSS válido)
+df_catalog = df_catalog.dropna(subset=['spec_id'])
+
+print(f"   ✓ df_catalog: spec_id criado")
+
+# ============ 3.2: REMOVER COLUNAS REDUNDANTES ============
+
+print(f"\n🧹 Removendo colunas redundantes antes do merge...")
+
+# Identificar colunas que existem em AMBOS os dataframes
+common_cols = set(df_conv.columns) & set(df_catalog.columns)
+common_cols.discard('spec_id')  # Manter spec_id (é a chave!)
+
+print(f"   Colunas em comum: {len(common_cols)}")
+
+if common_cols:
+    print(f"   Removendo do catálogo: {sorted(common_cols)}")
+    df_catalog_clean = df_catalog.drop(columns=list(common_cols))
+else:
+    df_catalog_clean = df_catalog.copy()
+
+# ============ 3.3: PRESERVAR INFORMAÇÕES ORIGINAIS ============
+
+# Garantir que mantemos plate, mjd, fiberid originais da convolução
+df_conv['plate_orig'] = df_conv['plate'].astype('int32')
+df_conv['mjd_orig'] = df_conv['mjd'].astype('int32')
+df_conv['fiberid_orig'] = df_conv[fiber_col_conv].astype('int16')
+
+print(f"\n✅ DataFrames preparados para merge sem conflitos")
+
+# ==================== PASSO 4: FAZER MERGE ====================
+
+print("\nPASSO 4: Fazendo merge por spec_id")
+print("-"*80)
 
 df_merged = df_conv.merge(
-    df_catalog_renamed,
-    left_on=['plate', 'mjd', 'fiberid'],
-    right_on=['plate', 'mjd', 'fiber'],
+    df_catalog_clean,
+    on='spec_id',
     how='left',
-    suffixes=('_conv', '_cat')
+    suffixes=('', '_dup')  # Se ainda houver duplicatas (não deveria), marca claramente
 )
 
-if 'fiberid' not in df_merged.columns and 'fiber' in df_merged.columns:
-    df_merged['fiberid'] = df_merged['fiber']
+# Verificar se há colunas duplicadas inesperadas
+dup_cols = [col for col in df_merged.columns if col.endswith('_dup')]
+if dup_cols:
+    print(f"⚠️  Colunas duplicadas encontradas: {dup_cols}")
+    print(f"   Isso não deveria acontecer. Removendo...")
+    df_merged = df_merged.drop(columns=dup_cols)
 
+# Restaurar nomes padrão para identificação
+df_merged['plate'] = df_merged['plate_orig']
+df_merged['mjd'] = df_merged['mjd_orig']
+df_merged['fiberid'] = df_merged['fiberid_orig']
+
+df_merged = df_merged.drop(columns=['plate_orig', 'mjd_orig', 'fiberid_orig', 'spec_id'])
 
 print(f"✅ Match concluído: {len(df_merged):,} objetos")
 
 # Verificar quantos encontraram match
-# matched = df_merged['ra'].notna().sum() if 'ra' in df_merged.columns else 0
 
 ra_cols = ['ra', 'RA', 'RAdeg', 'RA_ICRS']
+matched = 0
 for col in ra_cols:
     if col in df_merged.columns:
         matched = df_merged[col].notna().sum()
         break
-else:
-    matched = 0
-
 
 print(f"   Com match no catálogo: {matched:,} ({100*matched/len(df_merged):.1f}%)")
 print(f"   Sem match: {len(df_merged) - matched:,}\n")
 
-# ==================== PASSO 4: COMPILAR CATÁLOGO FINAL ====================
+# ==================== PASSO 5: COMPILAR CATÁLOGO FINAL ====================
 
-print("PASSO 4: Compilando catálogo final")
+print("PASSO 5: Compilando catálogo final")
 print("-"*80)
 
 # Criar catálogo estruturado
@@ -165,8 +233,6 @@ catalog_data = {}
 
 # 1. Identificação
 print("   📋 Identificação...")
-
-# catalog_data['object_id'] = df_merged['object_name'].values
 
 for col in ['object_name', 'SDSS', 'specObjID', 'objid']:
     if col in df_merged.columns:
@@ -179,20 +245,20 @@ else:
     ])
 
 catalog_data['plate'] = df_merged['plate'].astype('int32').values
-
 catalog_data['mjd'] = df_merged['mjd'].astype('int32').values
-
 catalog_data['fiberid'] = df_merged['fiberid'].astype('int16').values
 
 # 2. Coordenadas
 print("   🌐 Coordenadas...")
-if 'ra' in df_merged.columns and 'dec' in df_merged.columns:
-    catalog_data['ra'] = df_merged['ra'].astype('float64').values
-    catalog_data['dec'] = df_merged['dec'].astype('float64').values
-elif 'RA' in df_merged.columns and 'Dec' in df_merged.columns:
-    catalog_data['ra'] = df_merged['RA'].astype('float64').values
-    catalog_data['dec'] = df_merged['Dec'].astype('float64').values
-else:
+ra_found = False
+for ra_col, dec_col in [('ra', 'dec'), ('RA', 'Dec'), ('RAdeg', 'DEdeg')]:
+    if ra_col in df_merged.columns and dec_col in df_merged.columns:
+        catalog_data['ra'] = df_merged[ra_col].astype('float64').values
+        catalog_data['dec'] = df_merged[dec_col].astype('float64').values
+        ra_found = True
+        break
+
+if not ra_found:
     print("   ⚠️  Coordenadas não encontradas!")
     catalog_data['ra'] = np.full(len(df_merged), np.nan)
     catalog_data['dec'] = np.full(len(df_merged), np.nan)
@@ -299,9 +365,9 @@ else:
 
 print(f"\n✅ Catálogo compilado com {len(catalog_data)} campos\n")
 
-# ==================== PASSO 5: CRIAR ASTROPY TABLE ====================
+# ==================== PASSO 6: CRIAR ASTROPY TABLE ====================
 
-print("PASSO 5: Criando Astropy Table")
+print("PASSO 6: Criando Astropy Table")
 print("-"*80)
 
 # Criar Table
@@ -364,15 +430,15 @@ table['catalog_source'] = Column(catalog_data['catalog_source'], description='So
 
 print(f"✅ Table criada com {len(table.colnames)} colunas\n")
 
-# ==================== PASSO 6: ADICIONAR METADADOS ====================
+# ==================== PASSO 7: ADICIONAR METADADOS ====================
 
-print("PASSO 6: Adicionando metadados do catálogo")
+print("PASSO 7: Adicionando metadados do catálogo")
 print("-"*80)
 
 table.meta['CATALOG'] = 'Primary White Dwarf Catalog'
 table.meta['VERSION'] = '1.0'
 table.meta['DATE'] = datetime.now().strftime('%Y-%m-%d')
-table.meta['AUTHOR'] = 'Your Name'  # AJUSTAR
+table.meta['AUTHOR'] = 'Rafael José Coelho Souza'
 table.meta['INSTITUTE'] = 'UFS'
 table.meta['N_OBJECTS'] = len(table)
 table.meta['DESCRIPTION'] = 'White dwarf catalog with S-PLUS synthetic photometry'
@@ -382,12 +448,19 @@ table.meta['FILTERS'] = 'uJAVA, J0378, J0395, J0410, J0430, gSDSS, J0515, rSDSS,
 
 print("✅ Metadados adicionados\n")
 
-# ==================== PASSO 7: SALVAR FITS ====================
+# ==================== PASSO 8: SALVAR FITS ====================
 
-print("PASSO 7: Salvando catálogo FITS")
+print("PASSO 8: Salvando catálogo FITS")
 print("-"*80)
 
 output_file = f"WD_primary_catalog_{datetime.now().strftime('%Y%m%d')}.fits"
+
+#table = Table.from_pandas(df_final)
+
+for col in table.colnames:
+    if table[col].dtype.kind in ['U', 'O']:
+        maxlen = max(len(str(v)) for v in table[col])
+        table[col] = table[col].astype(f'U{maxlen}')
 
 table.write(output_file, format='fits', overwrite=True)
 
